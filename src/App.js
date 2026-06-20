@@ -1,11 +1,65 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Stopwatch } from "./components/Stopwatch";
+import { SignInPage } from "./pages/SignInPage";
+import { SignUpPage } from "./pages/SignUpPage";
+import { Homepage } from "./pages/Homepage";
+import { UserContextProvider, useUserContext } from "./context/UserContext";
 
-export const App = () => {
+const AppContent = ({ currentPath, navigateTo }) => {
+  const { isUserLoggedIn, loading } = useUserContext();
+
+  if (loading) {
+    return <div style={appStyles.container}>Loading Application...</div>;
+  }
+
+  if (!isUserLoggedIn) {
+    if (currentPath === "/sign-up") {
+      return (
+        <div style={appStyles.container}>
+          <SignUpPage navigateTo={navigateTo} />
+        </div>
+      );
+    }
+    return (
+      <div style={appStyles.container}>
+        <SignInPage navigateTo={navigateTo} />
+      </div>
+    );
+  }
+
   return (
     <div style={appStyles.container}>
-      <Stopwatch />
+      {(currentPath === "/" || currentPath === "/home") && (
+        <Homepage navigateTo={navigateTo} />
+      )}
+
+      {currentPath === "/stopwatch" && <Stopwatch navigateTo={navigateTo} />}
+
+      {currentPath !== "/" &&
+        currentPath !== "/home" &&
+        currentPath !== "/stopwatch" && <Homepage navigateTo={navigateTo} />}
     </div>
+  );
+};
+
+export const App = () => {
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+
+  const navigateTo = (path) => {
+    window.history.pushState({}, "", path);
+    setCurrentPath(path);
+  };
+
+  useEffect(() => {
+    const handleState = () => setCurrentPath(window.location.pathname);
+    window.addEventListener("popstate", handleState);
+    return () => window.removeEventListener("popstate", handleState);
+  }, []);
+
+  return (
+    <UserContextProvider>
+      <AppContent currentPath={currentPath} navigateTo={navigateTo} />
+    </UserContextProvider>
   );
 };
 
@@ -16,6 +70,8 @@ const appStyles = {
     alignItems: "center",
     minHeight: "100vh",
     backgroundColor: "#f5f5f5",
+    width: "100%",
+    boxSizing: "border-box",
   },
 };
 
