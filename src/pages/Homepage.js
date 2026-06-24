@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Header } from "../components/Header";
+import { DataTable } from "../components/DataTable";
+import { SaveButton } from "../components/SaveButton";
+import { HomePageTable } from "../components/HomePageTable";
 import { useUserContext } from "../context/UserContext";
 import { firestore } from "../firebase/Firebase";
 import {
@@ -9,6 +12,8 @@ import {
   onSnapshot,
   doc,
   getDoc,
+  addDoc,
+  deleteDoc,
 } from "firebase/firestore";
 
 export const Homepage = ({ navigateTo }) => {
@@ -16,6 +21,11 @@ export const Homepage = ({ navigateTo }) => {
   const [userName, setUserName] = useState("Runner");
   const [savedRuns, setSavedRuns] = useState([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
+
+  const [time, setTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [laps, setLaps] = useState([]);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -46,18 +56,88 @@ export const Homepage = ({ navigateTo }) => {
         id: doc.id,
         laps: doc.data().laps || [],
         rawDate: doc.data().createdAt?.toDate() || new Date(0),
-        date:
-          doc.data().createdAt?.toDate().toLocaleDateString() || "Recent Run",
       }));
-
       runsData.sort((a, b) => b.rawDate - a.rawDate);
-
       setSavedRuns(runsData);
       setLoadingRuns(false);
     });
 
     return () => unsubscribe();
   }, [currentUser]);
+
+  const handleStart = () => {
+    if (!isRunning) {
+      setIsRunning(true);
+      const startTime = Date.now() - time;
+      timerRef.current = setInterval(() => {
+        setTime(Date.now() - startTime);
+      }, 10);
+    }
+  };
+
+  const handleStop = () => {
+    if (isRunning) {
+      clearInterval(timerRef.current);
+      setIsRunning(false);
+    }
+  };
+
+  const handleLap = () => {
+    if (isRunning && laps.length < 5) {
+      setLaps([...laps, time]);
+    }
+  };
+
+  const handleReset = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setIsRunning(false);
+    setTime(0);
+    setLaps([]);
+  };
+
+  const handleSaveProgress = async () => {
+    if (!currentUser) return;
+
+    try {
+      const structuredLaps = laps.map((lapTime, index) => ({
+        lapNumber: index + 1,
+        timeMs: lapTime,
+      }));
+
+      await addDoc(collection(firestore, "runs"), {
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        laps: structuredLaps,
+        createdAt: new Date(),
+      });
+
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      setIsRunning(false);
+      setLaps([]);
+      setTime(0);
+    } catch (error) {
+      console.error("Firebase Run Saving Error:", error);
+      alert("Failed to upload run to the cloud database.");
+    }
+  };
+
+  const handleDeleteRun = async (documentId) => {
+    const confirmation = window.confirm(
+      "Are you sure you want to delete this recorded run row?",
+    );
+    if (!confirmation) return;
+    try {
+      await deleteDoc(doc(firestore, "runs", documentId));
+    } catch (error) {
+      console.error("Firestore Delete Operation Error:", error);
+    }
+  };
 
   const formatTime = (totalMs) => {
     if (totalMs === undefined) return "00:00:00";
@@ -76,48 +156,48 @@ export const Homepage = ({ navigateTo }) => {
 
       <h2 style={styles.welcomeText}>Welcome back, {userName}! </h2>
 
-      <div style={styles.mainGrid}>
-        <div style={styles.cardsGrid}>
-          {loadingRuns ? (
-            <div style={styles.statusMessage}>
-              Loading your history ledger...
-            </div>
-          ) : savedRuns.length === 0 ? (
-            <div style={styles.statusMessage}>
-              No saved workouts found. Go track some laps!
-            </div>
-          ) : (
-            savedRuns.map((run, index) => (
-              <div key={run.id} style={styles.runCard}>
-                <div style={styles.cardHeader}>
-                  <h3 style={styles.cardTitle}>
-                    Run #{savedRuns.length - index}
-                  </h3>
-                  <span style={styles.cardDate}>{run.date}</span>
-                </div>
-                <div style={styles.dividerLine} />
-                <ul style={styles.lapList}>
-                  {run.laps.map((lap, i) => (
-                    <li key={i} style={styles.lapRow}>
-                      <span style={styles.lapNumber}>Lap {lap.lapNumber}</span>
-                      <span style={styles.lapTime}>
-                        {formatTime(lap.timeMs)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))
-          )}
+      <div style={styles.workspaceWrapper}>
+        <div style={styles.stopwatchCard}>
+          <h2 style={styles.cardTitle}>Stopwatch</h2>
+          <div style={styles.timerDisplay}>{formatTime(time)}</div>
+
+          <div style={styles.btnRow}>
+            <button style={styles.btn} onClick={handleStart}>
+              Start
+            </button>
+            <button style={styles.btn} onClick={handleStop}>
+              Stop
+            </button>
+            <button
+              style={{
+                ...styles.btn,
+                ...(isRunning && laps.length < 5
+                  ? styles.activeLapBtn
+                  : styles.disabledLapBtn),
+              }}
+              onClick={handleLap}
+              disabled={!isRunning || laps.length >= 5}
+            >
+              Lap
+            </button>
+            <button style={styles.btn} onClick={handleReset}>
+              Reset
+            </button>
+          </div>
         </div>
 
-        <div style={styles.sidebar}>
-          <button
-            onClick={() => navigateTo("/stopwatch")}
-            style={styles.actionBtn}
-          >
-            Go to Stopwatch
-          </button>
+        <div style={styles.activeTableContainer}>
+          <DataTable laps={laps} />
+          <SaveButton laps={laps} onSave={handleSaveProgress} />
+        </div>
+
+        <div style={styles.historyTableContainer}>
+          <h3 style={styles.ledgerTitle}>Saved Runs Ledger</h3>
+          {loadingRuns ? (
+            <div style={styles.loadingBox}>Loading your history ledger...</div>
+          ) : (
+            <HomePageTable savedRuns={savedRuns} onDelete={handleDeleteRun} />
+          )}
         </div>
       </div>
     </div>
@@ -136,97 +216,72 @@ const styles = {
   welcomeText: {
     fontSize: "28px",
     color: "#0f172a",
-    margin: "0 0 30px 4px",
+    margin: "0 0 35px 4px",
     fontWeight: "600",
   },
-  mainGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 280px",
-    gap: "40px",
-    alignItems: "start",
+  workspaceWrapper: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    width: "100%",
+    gap: "45px",
   },
-  cardsGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "24px",
+
+  stopwatchCard: {
+    backgroundColor: "#ffffff",
+    padding: "24px",
+    borderRadius: "12px",
+    border: "1px solid #ccc",
+    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)",
+    width: "360px",
+    textAlign: "center",
+    boxSizing: "border-box",
   },
-  statusMessage: {
-    gridColumn: "1 / -1",
+  cardTitle: { margin: "0 0 16px 0", color: "#333", fontSize: "20px" },
+  timerDisplay: { fontSize: "40px", fontWeight: "bold", margin: "20px 0" },
+  btnRow: { display: "flex", gap: "8px" },
+  btn: {
+    flex: 1,
+    padding: "10px 0",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
+    background: "#fff",
+    cursor: "pointer",
+    fontSize: "14px",
+  },
+  activeLapBtn: { background: "#fff", color: "#000", borderColor: "#ccc" },
+  disabledLapBtn: {
+    background: "#f0f0f0",
+    color: "#aaa",
+    borderColor: "#e0e0e0",
+    cursor: "not-allowed",
+  },
+
+  activeTableContainer: {
+    width: "100%",
+    maxWidth: "800px",
+    display: "flex",
+    flexDirection: "column",
+    boxSizing: "border-box",
+  },
+
+  historyTableContainer: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+  },
+  ledgerTitle: {
+    margin: "0 0 14px 4px",
+    fontSize: "18px",
+    color: "#475569",
+    fontWeight: "600",
+  },
+  loadingBox: {
     textAlign: "center",
     padding: "40px",
     color: "#64748b",
-    fontSize: "16px",
     backgroundColor: "#ffffff",
     borderRadius: "12px",
-    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)",
-  },
-  runCard: {
-    backgroundColor: "#ffffff",
     border: "1px solid #ccc",
-    borderRadius: "12px",
-    padding: "24px",
-    boxSizing: "border-box",
-    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)",
-  },
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "12px",
-  },
-  cardTitle: {
-    margin: 0,
-    fontSize: "18px",
-    fontWeight: "600",
-    color: "#0f172a",
-  },
-  cardDate: {
-    fontSize: "13px",
-    color: "#64748b",
-  },
-  dividerLine: {
-    height: "1px",
-    backgroundColor: "#e2e8f0",
-    marginBottom: "16px",
-  },
-  lapList: {
-    listStyleType: "none",
-    margin: 0,
-    padding: 0,
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-  },
-  lapRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    fontSize: "15px",
-  },
-  lapNumber: {
-    color: "#64748b",
-    fontWeight: "500",
-  },
-  lapTime: {
-    fontFamily: "monospace",
-    fontWeight: "600",
-    color: "#0f172a",
-    fontSize: "16px",
-  },
-  sidebar: {
-    display: "flex",
-    flexDirection: "column",
-  },
-  actionBtn: {
-    backgroundColor: "#0f172a",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "8px",
-    padding: "16px 24px",
-    fontSize: "16px",
-    fontWeight: "600",
-    cursor: "pointer",
-    textAlign: "center",
-    boxShadow: "0 4px 6px -1px rgba(15, 23, 42, 0.15)",
   },
 };

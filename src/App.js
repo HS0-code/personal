@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { Stopwatch } from "./components/Stopwatch";
 import { SignInPage } from "./pages/SignInPage";
 import { SignUpPage } from "./pages/SignUpPage";
 import { Homepage } from "./pages/Homepage";
@@ -8,10 +7,12 @@ import { UserContextProvider, useUserContext } from "./context/UserContext";
 const AppContent = ({ currentPath, navigateTo }) => {
   const { isUserLoggedIn, loading } = useUserContext();
 
+  // Prevents layout flicker while verifying session validity
   if (loading) {
     return <div style={appStyles.container}>Loading Application...</div>;
   }
 
+  // SECURITY GATE: If logged out, user ONLY sees Sign In or Sign Up forms
   if (!isUserLoggedIn) {
     if (currentPath === "/sign-up") {
       return (
@@ -27,17 +28,10 @@ const AppContent = ({ currentPath, navigateTo }) => {
     );
   }
 
+  // AUTHENTICATED ACCESS: All paths safely route to your main dashboard page
   return (
     <div style={appStyles.container}>
-      {(currentPath === "/" || currentPath === "/home") && (
-        <Homepage navigateTo={navigateTo} />
-      )}
-
-      {currentPath === "/stopwatch" && <Stopwatch navigateTo={navigateTo} />}
-
-      {currentPath !== "/" &&
-        currentPath !== "/home" &&
-        currentPath !== "/stopwatch" && <Homepage navigateTo={navigateTo} />}
+      <Homepage navigateTo={navigateTo} />
     </div>
   );
 };

@@ -15,19 +15,19 @@ export const Header = ({ navigateTo }) => {
 
   return (
     <header style={styles.header}>
+      {/* Left Title */}
       <h1 onClick={() => navigateTo("/")} style={styles.brandText}>
         Stopwatch
       </h1>
 
+      {/* Center Navigation - Stopwatch Button Deleted */}
       <nav style={styles.navLinks}>
-        <button onClick={() => navigateTo("/stopwatch")} style={styles.navBtn}>
-          Stopwatch
-        </button>
         <button onClick={() => navigateTo("/")} style={styles.navBtn}>
           Home
         </button>
       </nav>
 
+      {/* Right Profile Dropdown Area */}
       <div style={styles.profileArea}>
         <div
           onClick={() => setShowDropdown(!showDropdown)}
@@ -72,10 +72,7 @@ const styles = {
     fontFamily: "sans-serif",
     cursor: "pointer",
   },
-  navLinks: {
-    display: "flex",
-    gap: "24px",
-  },
+  navLinks: { display: "flex", gap: "24px" },
   navBtn: {
     background: "none",
     border: "none",
@@ -85,9 +82,7 @@ const styles = {
     cursor: "pointer",
     fontFamily: "sans-serif",
   },
-  profileArea: {
-    position: "relative",
-  },
+  profileArea: { position: "relative" },
   avatarButton: {
     width: "42px",
     height: "42px",
